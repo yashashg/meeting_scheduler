@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chrome STT → ElevenLabs TTS</title>
+</head>
+<body>
+  <h2>🎙️ Speak something and hear it back with ElevenLabs!</h2>
+  <button onclick="startListening()"> Start Listening</button>
+  <p><strong>Transcription:</strong> <span id="transcript"></span></p>
+  <p><strong>Status:</strong> <span id="status">Idle</span></p>
+
+  <script>
+    const transcriptElem = document.getElementById("transcript");
+    const statusElem = document.getElementById("status");
+
+    function startListening() {
+      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      statusElem.textContent = "Listening...";
+
+      recognition.onresult = async (event) => {
+        const transcript = event.results[0][0].transcript;
+        transcriptElem.textContent = transcript;
+        statusElem.textContent = " Sending to ElevenLabs...";
+
+        // Send to FastAPI backend for ElevenLabs TTS
+        const response = await fetch("http://127.0.0.1:8000/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ message: transcript })
+        });
+
+        if (!response.ok) {
+          statusElem.textContent = " Error from server.";
+          return;
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        const audio = new Audio(audioUrl);
+        audio.play();
+        statusElem.textContent = "🔊 Playing response from ElevenLabs.";
+      };
+
+      recognition.onerror = (event) => {
+        statusElem.textContent = " Error: " + event.error;
+      };
+
+      recognition.start();
+    }
+  </script>
+</body>
+</html>
