@@ -1,59 +1,87 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Chrome STT → ElevenLabs TTS</title>
+  <meta charset="UTF-8" />
+  <title>Voice Chat Demo</title>
 </head>
-<body>
-  <h2>🎙️ Speak something and hear it back with ElevenLabs!</h2>
-  <button onclick="startListening()"> Start Listening</button>
-  <p><strong>Transcription:</strong> <span id="transcript"></span></p>
-  <p><strong>Status:</strong> <span id="status">Idle</span></p>
+<body style="font-family:sans-serif; background:#111; color:#fff; display:flex; flex-direction:column; align-items:center; padding:2rem;">
+  <h2>🎤 LLM Voice Chat</h2>
+  <button id="micBtn" style="padding:1rem; font-size:1.2rem;">🎤 Start Listening</button>
+  <p id="transcript" style="margin-top:1rem;"></p>
+  <audio id="player" controls style="margin-top:1rem;"></audio>
 
   <script>
-    const transcriptElem = document.getElementById("transcript");
-    const statusElem = document.getElementById("status");
+    const BACKEND_URL = "http://localhost:8000/chat"; // replace with your backend
 
-    function startListening() {
-      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.lang = 'en-US';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+    const micBtn = document.getElementById("micBtn");
+    const transcriptEl = document.getElementById("transcript");
+    const player = document.getElementById("player");
 
-      statusElem.textContent = "Listening...";
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      micBtn.disabled = true;
+      micBtn.textContent = "❌ SpeechRecognition not supported";
+    }
 
-      recognition.onresult = async (event) => {
-        const transcript = event.results[0][0].transcript;
-        transcriptElem.textContent = transcript;
-        statusElem.textContent = " Sending to ElevenLabs...";
+    let recognizer;
 
-        // Send to FastAPI backend for ElevenLabs TTS
-        const response = await fetch("http://127.0.0.1:8000/chat", {
+    micBtn.onclick = () => {
+      if (!recognizer) {
+        recognizer = new SR();
+        recognizer.lang = "en-IN";
+        recognizer.continuous = false;
+        recognizer.maxAlternatives = 1;
+
+        recognizer.onresult = (event) => {
+          const res = event.results[0];
+          const text = res[0].transcript;
+          transcriptEl.textContent = "🧑‍💻 " + text;
+          if (res.isFinal) sendToBackend(text);
+        };
+
+        recognizer.onend = () => {
+          recognizer.start(); // auto-restart after each pause
+        };
+
+        recognizer.onerror = (e) => console.error("Speech error:", e);
+      }
+
+      recognizer.start();
+      micBtn.disabled = true;
+      micBtn.textContent = "🎤 Listening…";
+    };
+
+    function sendToBackend(text) {
+      const mediaSource = new MediaSource();
+      player.src = URL.createObjectURL(mediaSource);
+
+      mediaSource.addEventListener("sourceopen", () => {
+        const sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+
+        fetch(BACKEND_URL, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ message: transcript })
-        });
-
-        if (!response.ok) {
-          statusElem.textContent = " Error from server.";
-          return;
-        }
-
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        const audio = new Audio(audioUrl);
-        audio.play();
-        statusElem.textContent = "🔊 Playing response from ElevenLabs.";
-      };
-
-      recognition.onerror = (event) => {
-        statusElem.textContent = " Error: " + event.error;
-      };
-
-      recognition.start();
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text })
+        })
+        .then(res => {
+          const reader = res.body.getReader();
+          function pump() {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                sourceBuffer.addEventListener("updateend", () => {
+                  mediaSource.endOfStream();
+                }, { once: true });
+                return;
+              }
+              sourceBuffer.appendBuffer(value);
+              sourceBuffer.addEventListener("updateend", pump, { once: true });
+            });
+          }
+          pump();
+          player.play().catch(() => {});
+        })
+        .catch(err => console.error("Backend error:", err));
+      });
     }
   </script>
 </body>

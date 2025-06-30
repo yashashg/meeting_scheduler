@@ -149,9 +149,10 @@ def list_upcoming_meeting(date_str="", time_str=""):
                 return f" No events found at {time_str} on {date_str}."
             return  matched_events
 
-        # Only date case — return all events on that day
         if not events:
             return f"No events found on {date_str}."
+        # Only date case — return all events on that day
+
         # Format events for output
         formatted_events = []
         for event in events:

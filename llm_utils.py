@@ -30,7 +30,7 @@ Conflicts (suggest alternatives if slot is taken)
 
 When all details are available, call the appropriate function silently.
 Never guess — ask if unsure.
-Respond in short, natural, and warm assistant-style replies — ideal for voice (TTS). Examples:
+Respond in short human way maximum 2-3 sentences, natural, and warm assistant-style replies — ideal for voice (TTS). Examples:
 “Got it. Let me check.”
 “Just a moment.”
 “Would you like to invite anyone else?”
@@ -50,13 +50,14 @@ def api_call(chat_history):
         model="gpt-4o-mini",
         messages=chat_history,
         functions=functions,
-        function_call="auto"
+        function_call="auto",
+        stream= True
         )
-        return response
+        for chunk in response: 
+            yield chunk                                
 
-def api_call_function(message,chat_history):
-        func_name = message.function_call.name
-        args = json.loads(message.function_call.arguments)
+def api_call_function(func_name,args,chat_history):
+        args = json.loads(args)
            
          # Dynamically call the function
         if func_name in function_map:
@@ -71,12 +72,14 @@ def api_call_function(message,chat_history):
                 "content": json.dumps(result)
         })
 
-            # 🧠 Step 2: Call GPT again with tool output
+            # step 2: Call GPT again with tool output
         second_response = openai.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=chat_history
+                messages=chat_history,
+                stream=True
         )
-        final_reply = second_response.choices[0].message.content
-        return final_reply  
-
+        # final_reply = second_response.choices[0].message.content
+        # return final_reply  
+        for chunk in second_response: 
+            yield chunk      
 
